@@ -1,0 +1,50 @@
+    <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Crossdock AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <h1>🚚 Crossdock AI</h1>
+    <p class="subtitle">Ask logistics questions</p>
+
+    <textarea
+      id="question"
+      placeholder="Ask something like: What documents are required to ship steel to Mexico?"
+    ></textarea>
+
+    <button onclick="askAI()">Ask AI</button>
+
+    <pre id="response"></pre>
+  </div>
+
+  <script>
+    async function askAI() {
+      const q = document.getElementById("question").value.trim();
+      const responseBox = document.getElementById("response");
+
+      if (!q) {
+        responseBox.textContent = "Please enter a question.";
+        return;
+      }
+
+      responseBox.textContent = "Thinking...";
+
+      try {
+        const res = await fetch(
+          `/api/ask?question=${encodeURIComponent(q)}`
+        );
+        const data = await res.json();
+
+        responseBox.textContent =
+          data.answer || JSON.stringify(data, null, 2);
+      } catch (err) {
+        responseBox.textContent = "Error calling AI API.";
+      }
+    }
+  </script>
+</body>
+</html>
