@@ -13,7 +13,6 @@
     <aside class="sidebar">
       <div class="brand">
         <div class="logoRing">
-          <!-- If you have /public/logo.png, swap this img src -->
           <img class="brandLogo" src="/logo.png" alt="Crossdock" onerror="this.style.display='none'" />
           <div class="brandFallback">CROSSDOCK</div>
         </div>
@@ -29,9 +28,7 @@
         <button class="newChat" onclick="newChat()">＋ New</button>
       </div>
 
-      <div id="chatList" class="chatList">
-        <!-- Example list items; JS will render these -->
-      </div>
+      <div id="chatList" class="chatList"></div>
 
       <div class="sidebarFooter">
         <div class="hint">Tip: click a chat to load it</div>
@@ -45,9 +42,47 @@
           <div class="dot"></div>
           <div class="topbarTitle">Crossdock AI Assistant</div>
         </div>
+
         <div class="topbarRight">
           <a class="pill" href="/api/ask" target="_blank" rel="noreferrer">API</a>
           <button class="pill" onclick="clearChat()">Clear</button>
+
+          <!-- SETTINGS -->
+          <div class="settings">
+            <button class="pill" onclick="toggleSettings()">⚙️ Settings</button>
+
+            <div id="settingsPanel" class="settingsPanel hidden">
+              <label>
+                Language
+                <select id="languageSelect" onchange="setLanguage(this.value)">
+                  <option value="en">English</option>
+                  <option value="es">Español</option>
+                  <option value="fr">Français</option>
+                  <option value="de">Deutsch</option>
+                  <option value="it">Italiano</option>
+                  <option value="pt">Português</option>
+                  <option value="zh">中文</option>
+                  <option value="ja">日本語</option>
+                  <option value="ko">한국어</option>
+                  <option value="ar">العربية</option>
+                  <option value="hi">हिन्दी</option>
+                  <option value="nl">Nederlands</option>
+                  <option value="sv">Svenska</option>
+                  <option value="pl">Polski</option>
+                  <option value="tr">Türkçe</option>
+                </select>
+              </label>
+
+              <label>
+                Theme
+                <select id="themeSelect" onchange="setTheme(this.value)">
+                  <option value="dark">Dark</option>
+                  <option value="light">Light</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
         </div>
       </header>
 
@@ -91,8 +126,47 @@
   </div>
 
   <script>
-    // ---------- Simple chat storage (local) ----------
-    const STORAGE_KEY = "crossdock_ai_chats_v1";
+    // -------------------------
+    // Settings persistence
+    // -------------------------
+    let currentLanguage = localStorage.getItem("crossdock_lang") || "en";
+    let currentTheme = localStorage.getItem("crossdock_theme") || "dark";
+
+    function setLanguage(lang) {
+      currentLanguage = lang;
+      localStorage.setItem("crossdock_lang", lang);
+    }
+
+    function setTheme(theme) {
+      currentTheme = theme;
+      document.body.dataset.theme = theme;
+      localStorage.setItem("crossdock_theme", theme);
+    }
+
+    function toggleSettings() {
+      document.getElementById("settingsPanel").classList.toggle("hidden");
+    }
+
+    // Close settings when clicking outside
+    document.addEventListener("click", (e) => {
+      const panel = document.getElementById("settingsPanel");
+      const wrapper = document.querySelector(".settings");
+      if (!wrapper.contains(e.target)) panel.classList.add("hidden");
+    });
+
+    // init theme + selects
+    document.body.dataset.theme = currentTheme;
+    window.addEventListener("DOMContentLoaded", () => {
+      const langSelect = document.getElementById("languageSelect");
+      const themeSelect = document.getElementById("themeSelect");
+      langSelect.value = currentLanguage;
+      themeSelect.value = currentTheme;
+    });
+
+    // -------------------------
+    // Simple chat storage (local)
+    // -------------------------
+    const STORAGE_KEY = "crossdock_ai_chats_v2";
     let chats = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
     let activeChatId = chats[0]?.id || null;
 
@@ -143,13 +217,30 @@
       renderMessages();
     }
 
+    function deleteChat(id) {
+      chats = chats.filter(c => c.id !== id);
+      if (activeChatId === id) {
+        activeChatId = chats[0]?.id || null;
+      }
+      if (!chats.length) {
+        ensureFirstChat();
+      }
+      save();
+      renderChatList();
+      renderMessages();
+    }
+
     function renderChatList() {
       const list = document.getElementById("chatList");
       list.innerHTML = "";
+
       chats.forEach(c => {
-        const item = document.createElement("button");
-        item.className = "chatItem" + (c.id === activeChatId ? " active" : "");
-        item.onclick = () => setActive(c.id);
+        const row = document.createElement("div");
+        row.className = "chatItem" + (c.id === activeChatId ? " active" : "");
+        row.onclick = () => setActive(c.id);
+
+        const left = document.createElement("div");
+        left.className = "chatItemLeft";
 
         const title = document.createElement("div");
         title.className = "chatItemTitle";
@@ -159,9 +250,21 @@
         meta.className = "chatItemMeta";
         meta.textContent = (c.messages?.length || 0) + " msgs";
 
-        item.appendChild(title);
-        item.appendChild(meta);
-        list.appendChild(item);
+        left.appendChild(title);
+        left.appendChild(meta);
+
+        const trash = document.createElement("button");
+        trash.className = "trashBtn";
+        trash.title = "Delete chat";
+        trash.innerHTML = "🗑️";
+        trash.onclick = (e) => {
+          e.stopPropagation();
+          deleteChat(c.id);
+        };
+
+        row.appendChild(left);
+        row.appendChild(trash);
+        list.appendChild(row);
       });
     }
 
@@ -210,6 +313,17 @@
       }
     });
 
+    function autoTitleFromQuestion(question) {
+      // Good “topic-style” title
+      const cleaned = question
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/[^\p{L}\p{N}\s\-→]/gu, "");
+
+      const words = cleaned.split(" ").slice(0, 6).join(" ");
+      return words.length ? (words.length > 34 ? words.slice(0, 34) + "…" : words) : "New chat";
+    }
+
     async function askAI() {
       const input = document.getElementById("question");
       const status = document.getElementById("status");
@@ -221,7 +335,12 @@
 
       // add user message
       c.messages.push({ role: "user", text: question });
-      if (c.title === "New chat") c.title = question.slice(0, 32) + (question.length > 32 ? "…" : "");
+
+      // auto-name chat topic on first message
+      if (!c.title || c.title === "New chat") {
+        c.title = autoTitleFromQuestion(question);
+      }
+
       input.value = "";
       save();
       renderChatList();
@@ -233,13 +352,13 @@
         const res = await fetch("/api/ask", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question })
+          body: JSON.stringify({ question, language: currentLanguage })
         });
 
         const data = await res.json();
 
         if (!res.ok) {
-          const msg = data?.error || "Request failed";
+          const msg = data?.error || data?.message || "Request failed";
           throw new Error(msg);
         }
 
