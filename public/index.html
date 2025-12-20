@@ -1,4 +1,4 @@
-    <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -7,42 +7,56 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="app">
+  <div class="container">
     <h1>🚚 Crossdock AI</h1>
-    <p class="subtitle">Ask logistics questions</p>
+    <p class="subtitle">Ask anything about logistics, intermodal, rail, or cross-border freight</p>
 
     <textarea
       id="question"
-      placeholder="Ask something like: What documents are required to ship steel to Mexico?"
+      placeholder="Ask a question (e.g. What is intermodal freight?)"
     ></textarea>
 
     <button onclick="askAI()">Ask AI</button>
 
-    <pre id="response"></pre>
+    <div id="loading" class="loading hidden">Thinking…</div>
+
+    <pre id="answer" class="answer"></pre>
   </div>
 
   <script>
     async function askAI() {
-      const q = document.getElementById("question").value.trim();
-      const responseBox = document.getElementById("response");
+      const question = document.getElementById("question").value.trim();
+      const answerBox = document.getElementById("answer");
+      const loading = document.getElementById("loading");
 
-      if (!q) {
-        responseBox.textContent = "Please enter a question.";
+      if (!question) {
+        answerBox.textContent = "Please enter a question.";
         return;
       }
 
-      responseBox.textContent = "Thinking...";
+      answerBox.textContent = "";
+      loading.classList.remove("hidden");
 
       try {
-        const res = await fetch(
-          `/api/ask?question=${encodeURIComponent(q)}`
-        );
+        const res = await fetch("/api/ask", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ question })
+        });
+
         const data = await res.json();
 
-        responseBox.textContent =
-          data.answer || JSON.stringify(data, null, 2);
+        if (!res.ok) {
+          throw new Error(data.error || "Request failed");
+        }
+
+        answerBox.textContent = data.answer || JSON.stringify(data, null, 2);
       } catch (err) {
-        responseBox.textContent = "Error calling AI API.";
+        answerBox.textContent = "Error: " + err.message;
+      } finally {
+        loading.classList.add("hidden");
       }
     }
   </script>
