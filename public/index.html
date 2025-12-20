@@ -7,58 +7,259 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="container">
-    <h1>🚚 Crossdock AI</h1>
-    <p class="subtitle">Ask anything about logistics, intermodal, rail, or cross-border freight</p>
+  <div class="app">
 
-    <textarea
-      id="question"
-      placeholder="Ask a question (e.g. What is intermodal freight?)"
-    ></textarea>
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logoRing">
+          <!-- If you have /public/logo.png, swap this img src -->
+          <img class="brandLogo" src="/logo.png" alt="Crossdock" onerror="this.style.display='none'" />
+          <div class="brandFallback">CROSSDOCK</div>
+        </div>
 
-    <button onclick="askAI()">Ask AI</button>
+        <div class="brandTitle">
+          <div class="brandAI">AI</div>
+          <div class="brandSub">Your 3PL Global Partner</div>
+        </div>
+      </div>
 
-    <div id="loading" class="loading hidden">Thinking…</div>
+      <div class="sidebarHeader">
+        <div class="sidebarTitle">Chats</div>
+        <button class="newChat" onclick="newChat()">＋ New</button>
+      </div>
 
-    <pre id="answer" class="answer"></pre>
+      <div id="chatList" class="chatList">
+        <!-- Example list items; JS will render these -->
+      </div>
+
+      <div class="sidebarFooter">
+        <div class="hint">Tip: click a chat to load it</div>
+      </div>
+    </aside>
+
+    <!-- MAIN CHAT AREA -->
+    <main class="main">
+      <header class="topbar">
+        <div class="topbarLeft">
+          <div class="dot"></div>
+          <div class="topbarTitle">Crossdock AI Assistant</div>
+        </div>
+        <div class="topbarRight">
+          <a class="pill" href="/api/ask" target="_blank" rel="noreferrer">API</a>
+          <button class="pill" onclick="clearChat()">Clear</button>
+        </div>
+      </header>
+
+      <section class="chatWrap">
+        <div class="chatPanel">
+          <div class="chatPanelHeader">
+            <div class="aiBadge">AI</div>
+            <div class="chatPanelTitle">
+              <div class="hello">Hello!</div>
+              <div class="prompt">Which logistics questions can I answer for you?</div>
+            </div>
+          </div>
+
+          <div class="chips">
+            <button class="chip" onclick="useChip('Explain intermodal vs truckload for steel shipments')">Intermodal vs Truck</button>
+            <button class="chip" onclick="useChip('Write an email to quote Chicago → Silao intermodal')">Quote Email</button>
+            <button class="chip" onclick="useChip('How do I reduce damage risk for coils in a 53\\' container?')">Coil Safety</button>
+            <button class="chip" onclick="useChip('Give me a 7-day lane pitch for Midwest → Central Mexico')">7-Day Pitch</button>
+          </div>
+
+          <div id="messages" class="messages"></div>
+
+          <div class="composer">
+            <textarea id="question" rows="1" placeholder="Type something…"></textarea>
+
+            <button class="sendBtn" onclick="askAI()" aria-label="Send">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M3 11.5L21 3l-8.5 18-2.7-7.2L3 11.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                <path d="M21 3 9.8 13.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+
+          <div id="status" class="status hidden">Thinking…</div>
+        </div>
+
+        <div class="cornerArrow" aria-hidden="true"></div>
+      </section>
+    </main>
+
   </div>
 
   <script>
-    async function askAI() {
-      const question = document.getElementById("question").value.trim();
-      const answerBox = document.getElementById("answer");
-      const loading = document.getElementById("loading");
+    // ---------- Simple chat storage (local) ----------
+    const STORAGE_KEY = "crossdock_ai_chats_v1";
+    let chats = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    let activeChatId = chats[0]?.id || null;
 
-      if (!question) {
-        answerBox.textContent = "Please enter a question.";
+    function save() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(chats));
+    }
+
+    function uid() {
+      return Math.random().toString(16).slice(2) + Date.now().toString(16);
+    }
+
+    function ensureFirstChat() {
+      if (!chats.length) {
+        const id = uid();
+        chats = [{ id, title: "New chat", messages: [] }];
+        activeChatId = id;
+        save();
+      }
+    }
+
+    function getActiveChat() {
+      return chats.find(c => c.id === activeChatId);
+    }
+
+    function setActive(id) {
+      activeChatId = id;
+      renderChatList();
+      renderMessages();
+    }
+
+    function newChat() {
+      const id = uid();
+      chats.unshift({ id, title: "New chat", messages: [] });
+      activeChatId = id;
+      save();
+      renderChatList();
+      renderMessages();
+      document.getElementById("question").focus();
+    }
+
+    function clearChat() {
+      const c = getActiveChat();
+      if (!c) return;
+      c.messages = [];
+      c.title = "New chat";
+      save();
+      renderChatList();
+      renderMessages();
+    }
+
+    function renderChatList() {
+      const list = document.getElementById("chatList");
+      list.innerHTML = "";
+      chats.forEach(c => {
+        const item = document.createElement("button");
+        item.className = "chatItem" + (c.id === activeChatId ? " active" : "");
+        item.onclick = () => setActive(c.id);
+
+        const title = document.createElement("div");
+        title.className = "chatItemTitle";
+        title.textContent = c.title || "Chat";
+
+        const meta = document.createElement("div");
+        meta.className = "chatItemMeta";
+        meta.textContent = (c.messages?.length || 0) + " msgs";
+
+        item.appendChild(title);
+        item.appendChild(meta);
+        list.appendChild(item);
+      });
+    }
+
+    function renderMessages() {
+      const c = getActiveChat();
+      const box = document.getElementById("messages");
+      box.innerHTML = "";
+
+      if (!c || !c.messages.length) {
+        const empty = document.createElement("div");
+        empty.className = "emptyState";
+        empty.innerHTML = `
+          <div class="emptyTitle">Start a conversation</div>
+          <div class="emptyText">Ask about rates, routing, transit, intermodal lanes, claims, documentation, or sales messaging.</div>
+        `;
+        box.appendChild(empty);
         return;
       }
 
-      answerBox.textContent = "";
-      loading.classList.remove("hidden");
+      c.messages.forEach(m => {
+        const row = document.createElement("div");
+        row.className = "msgRow " + (m.role === "user" ? "user" : "ai");
+
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        bubble.textContent = m.text;
+
+        row.appendChild(bubble);
+        box.appendChild(row);
+      });
+
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function useChip(text) {
+      document.getElementById("question").value = text;
+      document.getElementById("question").focus();
+    }
+
+    // Enter to send, Shift+Enter newline
+    const q = document.getElementById("question");
+    q.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        askAI();
+      }
+    });
+
+    async function askAI() {
+      const input = document.getElementById("question");
+      const status = document.getElementById("status");
+      const question = input.value.trim();
+      if (!question) return;
+
+      const c = getActiveChat();
+      if (!c) return;
+
+      // add user message
+      c.messages.push({ role: "user", text: question });
+      if (c.title === "New chat") c.title = question.slice(0, 32) + (question.length > 32 ? "…" : "");
+      input.value = "";
+      save();
+      renderChatList();
+      renderMessages();
+
+      status.classList.remove("hidden");
 
       try {
         const res = await fetch("/api/ask", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ question })
         });
 
         const data = await res.json();
 
         if (!res.ok) {
-          throw new Error(data.error || "Request failed");
+          const msg = data?.error || "Request failed";
+          throw new Error(msg);
         }
 
-        answerBox.textContent = data.answer || JSON.stringify(data, null, 2);
+        c.messages.push({ role: "ai", text: data.answer || "(No answer returned)" });
+        save();
+        renderMessages();
       } catch (err) {
-        answerBox.textContent = "Error: " + err.message;
+        c.messages.push({ role: "ai", text: "Error: " + err.message });
+        save();
+        renderMessages();
       } finally {
-        loading.classList.add("hidden");
+        status.classList.add("hidden");
       }
     }
+
+    // init
+    ensureFirstChat();
+    if (!activeChatId) activeChatId = chats[0].id;
+    renderChatList();
+    renderMessages();
   </script>
 </body>
 </html>
